@@ -1,0 +1,6 @@
+{
+  "name": "Super Flávio World",
+  "description": "Um jogo retrô de plataforma 2D em pixel art em estilo arcade com 7 fases e controles completos.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
