@@ -49,7 +49,7 @@ export default function App() {
                 <li>Pulo <b>■■■□□</b></li>
                 <li>Velocidade <b>■■■□□</b></li>
                 <li>Blindagem <b>■■■■■</b></li>
-                <li>Vidas <b>22</b></li>
+                <li>Vidas <b>5</b></li>
               </ul>
               <div className="quip" id="quip">1 de 1 jogador disponível.</div>
             </div>

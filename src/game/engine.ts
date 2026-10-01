@@ -60,7 +60,7 @@ export function initGame() {
   // State
   let S = 'title';
   let T = 0;
-  let lives = 22;
+  let lives = 5;
   let mapIdx = 0;
   let lv: LevelData | null = null;
   let st: any = null;
@@ -329,7 +329,7 @@ export function initGame() {
     const roll = $('roll');
     if (roll) {
       roll.innerHTML = final
-        ? `<div class="go-kick">${heroName()} × 0</div><div class="go-big" style="text-decoration:line-through;text-decoration-thickness:calc(.6*var(--u))">Game over</div><div class="go-head">Aliado inesperado!</div><canvas id="moroSpr" width="14" height="20" style="width:calc(7*var(--u));height:calc(10*var(--u));image-rendering:pixelated" aria-hidden="true"></canvas><div class="go-sub">O Flavinho nunca foi condenado, e não ia ser agora. Sergio Moro, o ex-juiz que condenou Lula, entrou no PL e subiu no palanque de Flávio. Ele chega a tempo de salvar o dia: +22 vidas.</div><div class="go-lives">${heroName()} × 22</div><div class="go-hint">Aperte ${keyJ()} para continuar a fase</div>`
+        ? `<div class="go-kick">${heroName()} × 0</div><div class="go-big" style="text-decoration:line-through;text-decoration-thickness:calc(.6*var(--u))">Game over</div><div class="go-head">Aliado inesperado!</div><canvas id="moroSpr" width="14" height="20" style="width:calc(7*var(--u));height:calc(10*var(--u));image-rendering:pixelated" aria-hidden="true"></canvas><div class="go-sub">O Flavinho nunca foi condenado, e não ia ser agora. Sergio Moro, o ex-juiz que condenou Lula, entrou no PL e subiu no palanque de Flávio. Ele chega a tempo de salvar o dia: +5 vidas.</div><div class="go-lives">${heroName()} × 5</div><div class="go-hint">Aperte ${keyJ()} para continuar a fase</div>`
         : `<div class="go-kick">Fase ${lv.i! + 1} · ${esc(D.name)}</div><div class="go-big">Game over</div><div class="go-head">${esc(msg.head)}</div><div class="go-sub">${esc(msg.sub)}</div><div class="go-lives">${heroName()} × ${lives}</div><div class="go-hint">${keyJ()} tenta de novo · ${keyBack()} volta ao mapa</div>`;
       if (final) {
         const mc = document.getElementById('moroSpr') as HTMLCanvasElement;
@@ -420,7 +420,7 @@ export function initGame() {
     lv.D = D;
     lv.cr = {};
     lv.th = THEMES[D.theme];
-    st = { coins: 0, queiroz: 0, crachas: 0, deposits: 0, carry: 0, dollars: 0, gust: 0, pontos: 0, provas: 0, spawn: 60 };
+    st = { coins: 0, queiroz: 0, crachas: 0, deposits: 0, carry: 0, dollars: 0, gust: 0, pontos: 0, provas: 0, spawn: 120 };
     if (lv.id === 'rachadinha') {
       let n = lv.ents.filter(e => e.k === 'coin').length;
       lv.g.forEach(r => r.forEach(c => { if (c === '?') n++; }));
@@ -507,8 +507,10 @@ export function initGame() {
 
     P.ext = 0;
     if (lv.id === 'vento') {
-      st.gust = Math.max(0, Math.sin(T * 0.018)) ** 2;
-      if (!P.on || K.L || K.R) P.ext -= 0.1 + 0.16 * st.gust;
+      st.gust = Math.max(0, Math.sin(T * 0.014)) ** 2;
+      if (!P.on) P.ext -= 0.03 + 0.05 * st.gust;
+      else if (K.L) P.ext -= 0.04 * st.gust;
+      else if (K.R) P.ext -= 0.02 * st.gust;
     }
     if (P.on) {
       const ty = Math.floor((P.y + P.h + 1) / TS);
@@ -600,8 +602,8 @@ export function initGame() {
           break;
         }
         case 'report': {
-          e.x += e.vx - st.gust * 1.2;
-          e.y += Math.sin(T * 0.09 + e.ph) * 0.7;
+          e.x += e.vx - st.gust * 0.35;
+          e.y += Math.sin(T * 0.05 + e.ph) * 0.35;
           if (e.x < camX - 30) { e.gone = true; st.provas++; }
           break;
         }
@@ -1576,11 +1578,14 @@ export function initGame() {
       case 'play':
         if (pressed.P) { setS('pause'); break; }
         if (lv?.id === 'vento' && --st.spawn <= 0) {
-          st.spawn = Math.round(110 - 60 * st.gust);
+          st.spawn = Math.round(165 - 35 * st.gust);
           if (P.x > 12 * TS && P.x < lv.goal * TS - 6 * TS) {
+            // Faixas de voo previsíveis (alta, média e baixa) para que o jogador possa antecipar
+            const lanes = [64, 92, 118];
+            const lane = lanes[(st.provas || 0) % lanes.length];
             lv.ents.push({
-              k: 'report', x: camX + VW + 8, y: 58 + hr(T) * 84, w: 14, h: 10,
-              vx: -(1 + hr(T + 3) * 0.7), vy: 0, ph: hr(T + 5) * 6, act: true
+              k: 'report', x: camX + VW + 8, y: lane, w: 12, h: 8,
+              vx: -1.05, vy: 0, ph: ((st.provas || 0) * 1.8), act: true
             });
           }
         }
@@ -1607,11 +1612,11 @@ export function initGame() {
         break;
       case 'card':
         if (confirmHit()) {
-          if (cardMode === 'moro') lives = 22;
+          if (cardMode === 'moro') lives = 5;
           loadLevel(lv!.i!);
           setS('play');
         } else if (pressed.P) {
-          if (cardMode === 'moro') lives = 22;
+          if (cardMode === 'moro') lives = 5;
           under = 'map';
           setS('map');
         }
