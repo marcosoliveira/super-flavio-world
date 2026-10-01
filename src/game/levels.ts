@@ -72,7 +72,7 @@ export const LEVELS: LevelDef[] = [
     theme: 'brasilia',
     intro: {
       title: 'Fase 1 · O Fantasma da Câmara',
-      body: 'Você ganhou um cargo de 40 horas semanais na Câmara, em Brasília. O detalhe: você mora, estuda e estagia no Rio. Sua missão é bater o ponto de segunda a sexta sem ninguém perceber que você não está lá. Segure X para ficar invisível e encoste nos 5 relógios de ponto: só vale se ninguém te vir. Se um servidor esbarrar em você visível, acabou. As moedas recarregam a invisibilidade.'
+      body: 'Você ganhou um cargo de 40 horas semanais na Câmara, em Brasília. O detalhe: você mora, estuda e estagia no Rio. Sua missão é bater o ponto de segunda a sexta sem ninguém perceber que você não está lá. Segure X para ficar invisível e encoste nos 5 relógios de ponto: só vale se ninguém te ver. Se um servidor esbarrar em você visível, acabou. As moedas recarregam a invisibilidade.'
     },
     outro: {
       body: 'Aos 19 anos, Flávio teve um cargo de 40 horas semanais na Câmara dos Deputados, em Brasília, enquanto estudava e estagiava no Rio. Para a BBC News Brasil, "tudo indica" que era um funcionário fantasma.',
