@@ -81,14 +81,53 @@ export default function App() {
         </div>
 
         <div id="toast" className="px" hidden></div>
+
+        <div id="urna" className="ov px" hidden>
+          <div className="urna">
+            <div className="u-bezel">
+              <div className="u-scr" id="urnaScr"></div>
+              <div id="credits" hidden>
+                <div className="crawl" id="crawl">
+                  <div className="logo" aria-label="Super Flávio World">
+                    <div className="s">Super</div>
+                    <div className="f">
+                      <span>F</span><span>L</span><span>Á</span><span>V</span><span>I</span><span>O</span>
+                    </div>
+                    <div className="w">World</div>
+                  </div>
+                  <p>Este jogo é uma paródia, mas é baseado em fatos reais, a partir de notícias checadas.</p>
+                  <p>É uma iniciativa independente, que tenta conscientizar sobre os problemas que cercam um dos candidatos a presidente.</p>
+                  <div className="cr-big">No dia 4 de outubro,<br />vote consciente.</div>
+                </div>
+                <div className="cr-hint" id="crHint" hidden></div>
+              </div>
+            </div>
+            <div className="u-side">
+              <div className="u-label">Super Flávio<br />World</div>
+              <div className="u-pad" aria-hidden="true">
+                <div className="u-keys">
+                  <span>1</span><span>2</span><span>3</span>
+                  <span>4</span><span>5</span><span>6</span>
+                  <span>7</span><span>8</span><span>9</span>
+                  <span className="z">0</span>
+                </div>
+                <div className="u-acts">
+                  <span className="br">Branco</span>
+                  <span className="co">Corrige</span>
+                  <span className="cf" id="urnaOk">Confirma</span>
+                </div>
+              </div>
+            </div>
+            <div className="u-vents" aria-hidden="true"></div>
+          </div>
+        </div>
+
       </div>
 
       <div className="touch" id="touch" aria-label="Controles na tela">
-        <div className="dpad" id="dpad">
-          <span className="u">▲</span>
+        <div className="dpad" id="dpad" aria-label="Andar">
           <span className="l">◀</span>
           <span className="r">▶</span>
-          <span className="d">▼</span>
         </div>
         <div className="btns">
           <button className="tbtn b" data-b="B" aria-label="Correr ou ação">

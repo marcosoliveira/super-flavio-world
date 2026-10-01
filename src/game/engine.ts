@@ -100,33 +100,31 @@ export function initGame() {
   const confirmHit = () => pressed.J || pressed.S;
 
   function setBtn(b: string, on: boolean, el?: Element | null) {
-    if (on && !K[b]) pressed[b] = true;
+    if (on && !K[b]) {
+      pressed[b] = true;
+      if (el) {
+        tone(b === 'J' ? 880 : b === 'B' ? 660 : 520, 0.03, 'square', 0.014);
+        try { navigator.vibrate?.(8); } catch (_) {}
+      }
+    }
     K[b] = on;
     if (el) el.classList.toggle('on', on);
   }
 
   const dpad = $('dpad');
   const dirEl: Record<string, HTMLElement | null> = {
-    U: dpad?.querySelector('.u') as HTMLElement,
-    D: dpad?.querySelector('.d') as HTMLElement,
     L: dpad?.querySelector('.l') as HTMLElement,
     R: dpad?.querySelector('.r') as HTMLElement
   };
   let dpadId: number | null = null;
 
+  // ◀ ▶: o dedo pode deslizar de um botão para o outro sem levantar
   function dpadAt(e: PointerEvent) {
     if (!dpad) return;
     const r = dpad.getBoundingClientRect();
     const dx = e.clientX - (r.left + r.width / 2);
-    const dy = e.clientY - (r.top + r.height / 2);
-    const dz = r.width * 0.1;
-    const v = Math.abs(dy) > Math.abs(dx) * 0.9;
-    const s: Record<string, boolean> = {
-      L: dx < -dz && !(v && Math.abs(dx) < dz * 2),
-      R: dx > dz && !(v && Math.abs(dx) < dz * 2),
-      U: dy < -dz && v,
-      D: dy > dz && v
-    };
+    const dz = r.width * 0.04;
+    const s: Record<string, boolean> = { L: dx < -dz, R: dx > dz };
     for (const b in s) setBtn(b, s[b], dirEl[b]);
   }
 
@@ -134,8 +132,8 @@ export function initGame() {
     if (isTouch()) return;
     document.documentElement.classList.add('touch-on');
     const p1 = $('pressTxt'), p2 = $('pickTxt'), p3 = $('pauseTxt'), ctl = $('ctl');
-    if (p1) p1.textContent = 'Toque para começar';
-    if (p2) p2.textContent = 'Toque para escolher';
+    if (p1) p1.textContent = 'Aperte A para começar';
+    if (p2) p2.textContent = 'Aperte A para escolher';
     if (p3) p3.textContent = 'A continua · B volta ao mapa';
     if (ctl) ctl.innerHTML = '<div><b>◀ ▶</b> andar<br><b>A</b> pular</div><div><b>B</b> correr / ação<br><b>II</b> pausa</div>';
     checkRotate();
@@ -179,7 +177,9 @@ export function initGame() {
     $('dlg').hidden = S !== 'dialog';
     $('card').hidden = S !== 'card';
     $('pause').hidden = S !== 'pause';
-    document.documentElement.classList.toggle('txt-open', S === 'dialog' || S === 'card');
+    $('urna').hidden = S !== 'urna' && S !== 'credits';
+    $('credits').hidden = S !== 'credits';
+    document.documentElement.classList.toggle('txt-open', ['dialog', 'card', 'urna', 'credits'].includes(S));
     if (S === 'map') mapBar();
   }
 
@@ -726,6 +726,13 @@ export function initGame() {
     return '';
   }
 
+  // Mensagem final sobre as eleições, exibida na tela da urna
+  const URNA_MSG = {
+    title: 'O fim desse jogo é você quem escolhe',
+    body: 'Flávio é candidato a presidente, e o mandato dele de senador termina em 31 de janeiro de 2027. Se perder a eleição, fica sem cargo a partir de 2027 e perde o foro privilegiado nos casos que não têm a ver com o mandato, que passam a correr na Justiça comum, como os de qualquer cidadão. Se for eleito, a Constituição impede que um presidente seja responsabilizado, durante o mandato, por atos alheios ao cargo. Aí o jogo provavelmente continua, impune, no Super Flávio World.',
+    src: ['cnnpl', 'ndmais', 'cf86']
+  };
+
   function showEnding(done: () => void) {
     dialog([
       {
@@ -741,13 +748,135 @@ export function initGame() {
           ['Condenações', '0']
         ],
         src: ['bbc22', 'stf', 'g1kop', 'g1em', 'bbcdh']
-      },
-      {
-        title: 'O fim desse jogo é você quem escolhe',
-        body: 'Flávio é candidato a presidente, e o mandato dele de senador termina em 31 de janeiro de 2027. Se perder a eleição, fica sem cargo a partir de 2027 e perde o foro privilegiado nos casos que não têm a ver com o mandato, que passam a correr na Justiça comum, como os de qualquer cidadão. Se for eleito, a Constituição impede que um presidente seja responsabilizado, durante o mandato, por atos alheios ao cargo. Aí o jogo provavelmente continua, impune, no Super Flávio World.',
-        src: ['cnnpl', 'ndmais', 'cf86']
       }
-    ], done, under);
+    ], () => showUrna(done), under);
+  }
+
+  // Cena final: urna eletrônica vista de frente, depois os créditos
+  let urna: { n: number; phase: number; t: number; done: () => void } | null = null;
+  let credY = 0, credEnd = false;
+
+  function urnaHidden() {
+    const el = $('urnaScr');
+    return el ? el.scrollHeight - el.clientHeight - el.scrollTop : 0;
+  }
+
+  function updUrnaHint() {
+    const h = document.getElementById('urnaHint');
+    if (!h) return;
+    const more = urnaHidden() > 2;
+    h.classList.toggle('more', more);
+    h.textContent = more ? `Aperte ${keyJ()} para rolar ▼` : `Aperte ${keyJ()} para confirmar ▶`;
+  }
+
+  function renderUrna(fresh = false) {
+    const el = $('urnaScr');
+    if (!el || !urna) return;
+    if (urna.phase === 1) {
+      el.innerHTML = '<div class="u-fim">Fim</div><div class="u-votou">Votou</div>';
+      el.classList.add('voted');
+      return;
+    }
+    el.classList.remove('voted');
+    const full = URNA_MSG.body;
+    const doneTyping = urna.n >= full.length;
+    let h = '<div class="u-top">Eleições 2026</div>';
+    h += `<h2>${esc(URNA_MSG.title)}</h2>`;
+    h += `<p>${esc(full.slice(0, Math.floor(urna.n)))}${doneTyping ? '' : '<span style="opacity:.4">▌</span>'}</p>`;
+    if (doneTyping) {
+      h += `<div class="src">Fontes: ${URNA_MSG.src.map((k: string) => `<a href="${SRC[k][1]}" target="_blank" rel="noopener noreferrer">${esc(SRC[k][0])} ↗</a>`).join(' · ')}</div>`;
+      h += '<div class="u-hint" id="urnaHint"></div>';
+    }
+    el.innerHTML = h;
+    if (fresh) el.scrollTop = 0;
+    else if (!doneTyping) el.scrollTop = el.scrollHeight;
+    updUrnaHint();
+  }
+
+  function showUrna(done: () => void) {
+    urna = { n: 0, phase: 0, t: 0, done };
+    renderUrna(true);
+    setS('urna');
+  }
+
+  function urnaBeep() {
+    // o "piiii" da urna depois do voto
+    for (let i = 0; i < 5; i++) tone(1046, 0.06, 'square', 0.04, 0, i * 0.085);
+    tone(1046, 0.7, 'square', 0.04, 0, 0.45);
+  }
+
+  function updUrna() {
+    if (!urna) return;
+    if (urna.phase === 0) {
+      const len = URNA_MSG.body.length;
+      if (urna.n < len) {
+        urna.n = Math.min(len, urna.n + 1.6);
+        if (confirmHit()) urna.n = len;
+        renderUrna();
+        if (urna.n < len && T % 3 === 0) tone(1400, 0.02, 'square', 0.012);
+        return;
+      }
+      if (confirmHit()) {
+        const el = $('urnaScr');
+        if (el && urnaHidden() > 2) {
+          sfx.sel();
+          el.scrollBy({ top: el.clientHeight * 0.75, behavior: 'smooth' });
+          return;
+        }
+        urna.phase = 1;
+        urna.t = 0;
+        const ok = $('urnaOk');
+        if (ok) { ok.classList.add('on'); setTimeout(() => ok.classList.remove('on'), 260); }
+        urnaBeep();
+        renderUrna();
+      }
+      return;
+    }
+    if (++urna.t > 110) startCredits();
+  }
+
+  function startCredits() {
+    credY = 0;
+    credEnd = false;
+    const hint = $('crHint');
+    if (hint) { hint.hidden = true; hint.textContent = `Aperte ${keyJ()} para voltar ao mapa`; }
+    setS('credits');
+    placeCredits();
+  }
+
+  function placeCredits() {
+    const box = $('credits'), crawl = $('crawl');
+    if (!box || !crawl) return;
+    const top = box.clientHeight - credY;
+    // para quando o último bloco chega ao meio da tela
+    const hintH = box.clientHeight * 0.14;
+    const stop = (box.clientHeight - hintH) / 2 - crawl.offsetHeight + (crawl.lastElementChild as HTMLElement)?.offsetHeight / 2;
+    if (top <= stop) {
+      crawl.style.transform = `translateY(${stop}px)`;
+      if (!credEnd) { credEnd = true; const h = $('crHint'); if (h) h.hidden = false; }
+      return;
+    }
+    crawl.style.transform = `translateY(${top}px)`;
+  }
+
+  function updCredits() {
+    if (!urna) return;
+    if (!credEnd) {
+      const box = $('credits');
+      const speed = (box ? box.clientHeight : 360) * 0.0032 * (K.J ? 4 : 1);
+      credY += speed;
+      placeCredits();
+    } else if (confirmHit()) {
+      sfx.sel();
+      const d = urna.done;
+      urna = null;
+      d();
+    }
+    if (pressed.P && urna) {
+      const d = urna.done;
+      urna = null;
+      d();
+    }
   }
 
   function finishLevel() {
@@ -1213,21 +1342,60 @@ export function initGame() {
     ctx.drawImage(SPR[(T >> 3) % 2 ? 'walk' : 'stand'][0], 150, 140);
   }
 
+  // Mapa: uma barra de chocolate com laranja, cheia de rachadurinhas
+  const BAR = { x: 12, y: 26, w: 312, h: 152, cols: 8, rows: 4 };
   function renderMap() {
-    R(0, 0, VW, VH, '#2a6fd6');
-    for (let y = 4; y < VH; y += 12) for (let x = ((y * 7 + T * 0.3) % 24) - 24; x < VW; x += 24) R(x, y, 8, 1, '#5b93e6');
-    ctx.fillStyle = '#1f7a2e'; ctx.beginPath(); ctx.ellipse(170, 100, 160, 82, 0, 0, Math.PI * 2); ctx.fill();
-    ctx.fillStyle = '#3ec04a'; ctx.beginPath(); ctx.ellipse(170, 96, 154, 76, 0, 0, Math.PI * 2); ctx.fill();
-    for (let i = 0; i < 14; i++) {
-      const x = 40 + hr(i) * 260, y = 40 + hr(i + 20) * 110;
-      circ(x, y, 5, '#2a9a3a'); circ(x - 3, y + 2, 4, '#2a9a3a');
+    // fundo: mesa escura
+    R(0, 0, VW, VH, '#2b160b');
+    for (let y = 0; y < VH; y += 6) R(0, y, VW, 1, '#331b0e');
+    // sombra e borda da barra
+    R(BAR.x + 3, BAR.y + 4, BAR.w, BAR.h, '#170b05');
+    R(BAR.x, BAR.y, BAR.w, BAR.h, '#8a4210');
+    // gomos com relevo
+    const cw = (BAR.w - 6) / BAR.cols, rh = (BAR.h - 6) / BAR.rows;
+    for (let r = 0; r < BAR.rows; r++) for (let c = 0; c < BAR.cols; c++) {
+      const x = Math.round(BAR.x + 3 + c * cw), y = Math.round(BAR.y + 3 + r * rh);
+      const w = Math.round(cw) - 2, h = Math.round(rh) - 2;
+      R(x, y, w, h, '#b85a14');
+      R(x + 2, y + 2, w - 4, h - 4, '#e8892e');
+      R(x + 2, y + 2, w - 4, 2, '#f6a64c');
+      R(x + 2, y + 2, 2, h - 4, '#f6a64c');
+      R(x + 2, y + h - 4, w - 4, 2, '#c96a1c');
+      R(x + w - 4, y + 2, 2, h - 4, '#c96a1c');
+      // raspas de laranja
+      for (let k = 0; k < 3; k++) {
+        const n = r * 31 + c * 7 + k;
+        R(x + 5 + Math.floor(hr(n) * (w - 12)), y + 5 + Math.floor(hr(n + 50) * (h - 12)), 2, 1, '#ffc46a');
+      }
     }
+    // rachadurinhas: trilhas em zigue-zague de 1 px
+    for (let i = 0; i < 46; i++) {
+      let x = BAR.x + 6 + Math.floor(hr(i * 3 + 1) * (BAR.w - 12));
+      let y = BAR.y + 6 + Math.floor(hr(i * 3 + 2) * (BAR.h - 12));
+      const len = 5 + Math.floor(hr(i * 3 + 3) * 9);
+      const dir = hr(i + 400) < 0.5 ? 1 : -1;
+      for (let k = 0; k < len; k++) {
+        R(x, y, 1, 1, '#6e3009');
+        R(x + 1, y + 1, 1, 1, '#f6a64c');
+        if (hr(i * 17 + k) < 0.55) x += dir; else y += 1;
+        if (hr(i * 29 + k) < 0.12) x -= dir * 2;
+        if (x < BAR.x + 4 || x > BAR.x + BAR.w - 5 || y > BAR.y + BAR.h - 5) break;
+      }
+    }
+    // mordida no canto de cima à direita
+    const bx = BAR.x + BAR.w, by = BAR.y;
+    const bite = [[0, 0, 15], [-12, -3, 9], [3, 13, 9]];
+    ctx.save();
+    ctx.beginPath(); ctx.rect(BAR.x, BAR.y, BAR.w, BAR.h); ctx.clip();
+    bite.forEach(([dx, dy, rr]) => circ(bx + dx, by + dy, rr + 2, '#8a4210'));
+    bite.forEach(([dx, dy, rr]) => circ(bx + dx, by + dy, rr, '#2b160b'));
+    ctx.restore();
     const maxIdx = Math.min(progress, 6);
     for (let i = 0; i < MAPNODES.length - 1; i++) {
       const [a, b] = [MAPNODES[i], MAPNODES[i + 1]], open = i < maxIdx;
       for (let k = 1; k < 8; k++) {
         const t = k / 8;
-        R(a[0] + (b[0] - a[0]) * t - 1, a[1] + (b[1] - a[1]) * t - 1, 3, 3, open ? '#f4e08a' : '#7ab87a');
+        R(a[0] + (b[0] - a[0]) * t - 1, a[1] + (b[1] - a[1]) * t - 1, 3, 3, open ? '#fff2c8' : '#8a4210');
       }
     }
     MAPNODES.forEach(([x, y], i) => {
@@ -1238,6 +1406,11 @@ export function initGame() {
       ctx.fillStyle = '#1a1020'; ctx.font = '6px "Press Start 2P", monospace';
       ctx.fillText(String(i + 1), x - 3, y + 3);
     });
+    // o Dark Horse espera ao lado da fase 7
+    const [hx, hy] = MAPNODES[6];
+    const hb = (T >> 5) % 2;
+    R(hx + 12, hy + 24, 22, 2, 'rgba(0,0,0,.35)');
+    drawHorse(hx + 12, hy + 8 - hb, -1, false);
     const [nx, ny] = MAPNODES[mapIdx];
     ctx.drawImage(SPR.stand[0], nx - 7, ny - 24 + Math.round(Math.sin(T * 0.12) * 2));
     ctx.fillStyle = '#1a1020'; ctx.font = '8px "Press Start 2P", monospace'; ctx.fillText('SUPER FLÁVIO WORLD', 13, 17);
@@ -1318,6 +1491,8 @@ export function initGame() {
         break;
       }
       case 'dialog': updDialog(); break;
+      case 'urna': updUrna(); break;
+      case 'credits': updCredits(); break;
       case 'play':
         if (pressed.P) { setS('pause'); break; }
         if (lv?.id === 'vento' && --st.spawn <= 0) {
@@ -1481,6 +1656,7 @@ export function initGame() {
     const el = $(id);
     if (!el) return;
     const fn = (e: Event) => {
+      if ((e as PointerEvent).pointerType === 'touch' || (e as PointerEvent).pointerType === 'pen') return;
       if ((e.target as HTMLElement)?.closest?.('a')) return;
       pressed.J = true;
       unlockAudio();
@@ -1490,7 +1666,8 @@ export function initGame() {
   });
 
   const stage = $('stage');
-  const onStageDown = () => {
+  const onStageDown = (e: PointerEvent) => {
+    if (e.pointerType === 'touch' || e.pointerType === 'pen') return;
     if (S === 'map') { pressed.J = true; unlockAudio(); }
   };
   stage?.addEventListener('pointerdown', onStageDown);
@@ -1502,7 +1679,38 @@ export function initGame() {
     if (document.hidden && S === 'play') setS('pause');
   };
   document.addEventListener('visibilitychange', onVisibilityChange);
+
+  // No celular, só os controles (e os links das fontes) aceitam toque.
+  // Fora deles, bloqueia zoom com dois toques, pinça, rolagem da página e menu de toque longo.
+  const TOUCH_OK = '.dpad, .tbtn, .tpause, #urnaOk, a';
+  const SCROLL_OK = '.dlg, .u-scr';
+  let lastTouchEnd = 0;
+  const closestOf = (t: EventTarget | null, sel: string) => (t as HTMLElement)?.closest?.(sel);
+  const onTouchStartBlock = (e: TouchEvent) => {
+    if (e.touches.length > 1 && !closestOf(e.target, TOUCH_OK)) { e.preventDefault(); return; }
+    if (!closestOf(e.target, TOUCH_OK) && !closestOf(e.target, SCROLL_OK)) e.preventDefault();
+  };
+  const onTouchMoveBlock = (e: TouchEvent) => {
+    if (e.touches.length > 1 || !closestOf(e.target, SCROLL_OK)) e.preventDefault();
+  };
+  const onTouchEndBlock = (e: TouchEvent) => {
+    const now = Date.now();
+    if (now - lastTouchEnd < 350 && !closestOf(e.target, 'a')) e.preventDefault();
+    lastTouchEnd = now;
+  };
+  const blockEvent = (e: Event) => e.preventDefault();
+  const blockMenu = (e: Event) => { if (isTouch()) e.preventDefault(); };
+  document.addEventListener('touchstart', onTouchStartBlock, { passive: false });
+  document.addEventListener('touchmove', onTouchMoveBlock, { passive: false });
+  document.addEventListener('touchend', onTouchEndBlock, { passive: false });
+  document.addEventListener('gesturestart', blockEvent);
+  document.addEventListener('gesturechange', blockEvent);
+  document.addEventListener('dblclick', blockEvent);
+  document.addEventListener('contextmenu', blockMenu);
   $('dlg')?.addEventListener('scroll', updNext);
+  $('urnaScr')?.addEventListener('scroll', updUrnaHint);
+  const onUrnaOk = (e: Event) => { e.preventDefault(); if (S === 'urna') { pressed.J = true; unlockAudio(); } };
+  $('urnaOk')?.addEventListener('pointerdown', onUrnaOk);
 
   if (window.matchMedia('(pointer:coarse)').matches || (navigator.maxTouchPoints > 0 && window.matchMedia('(hover:none)').matches)) {
     enableTouch();
@@ -1531,6 +1739,15 @@ export function initGame() {
     screenHandlers.forEach(({ el, fn }) => el.removeEventListener('pointerdown', fn));
     stage?.removeEventListener('pointerdown', onStageDown);
     document.removeEventListener('visibilitychange', onVisibilityChange);
+    document.removeEventListener('touchstart', onTouchStartBlock);
+    document.removeEventListener('touchmove', onTouchMoveBlock);
+    document.removeEventListener('touchend', onTouchEndBlock);
+    document.removeEventListener('gesturestart', blockEvent);
+    document.removeEventListener('gesturechange', blockEvent);
+    document.removeEventListener('dblclick', blockEvent);
+    document.removeEventListener('contextmenu', blockMenu);
     $('dlg')?.removeEventListener('scroll', updNext);
+    $('urnaScr')?.removeEventListener('scroll', updUrnaHint);
+    $('urnaOk')?.removeEventListener('pointerdown', onUrnaOk);
   };
 }
