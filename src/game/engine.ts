@@ -1058,11 +1058,30 @@ export function initGame() {
       circ(270, 40, 14, '#fff6d0'); circ(276, 36, 12, '#2a2a5e');
       rep(cam, 0.3, 240, (x, k) => {
         for (let j = 0; j < 5; j++) {
-          const bw = 26 + (Math.floor(hr(k * 9 + j) * 14)), bh = 40 + (Math.floor(hr(k * 5 + j) * 70)), bx = x + j * 48;
+          const bId = k * 5 + j;
+          const bw = 26 + (Math.floor(hr(bId * 9 + 1) * 14));
+          const bh = 40 + (Math.floor(hr(bId * 5 + 3) * 70));
+          const bx = x + j * 48;
           R(bx, VH - bh, bw, bh, '#191a3c');
-          for (let wy = VH - bh + 6; wy < VH - 8; wy += 9) {
-            for (let wx = bx + 4; wx < bx + bw - 4; wx += 7) {
-              if (hr(wx * 3 + wy + k) > 0.62) R(wx, wy, 3, 4, '#f7d56b');
+          let row = 0;
+          for (let wy = VH - bh + 6; wy < VH - 8; wy += 9, row++) {
+            let col = 0;
+            for (let wx = bx + 4; wx < bx + bw - 4; wx += 7, col++) {
+              const winId = bId * 1000 + row * 23 + col * 7;
+              const baseLit = hr(winId) > 0.58;
+              const isDynamic = hr(winId * 31 + 5) > 0.90; // Apenas ~10% das janelas mudam ao longo da fase
+              let lit = baseLit;
+              if (isDynamic) {
+                // Ciclo lento e suave (8 a 12 segundos) sem qualquer cintilação estroboscópica
+                const period = 520 + Math.floor(hr(winId * 17) * 240);
+                const phase = Math.floor(hr(winId * 11) * period);
+                lit = ((T + phase) % period) < (period * 0.5);
+              }
+              if (lit) {
+                R(wx, wy, 3, 4, '#f7d56b');
+              } else {
+                R(wx, wy, 3, 4, '#13142e');
+              }
             }
           }
         }
