@@ -43,7 +43,7 @@ export default function App() {
               <canvas id="selSprite" width="14" height="20"></canvas>
               <span className="arrow">▶</span>
             </div>
-            <div style={{ display: 'grid', gap: '1.4cqw' }}>
+            <div style={{ display: 'grid', gap: 'calc(1.4 * var(--u))' }}>
               <div className="name">Flavinho</div>
               <ul>
                 <li>Pulo <b>■■■□□</b></li>

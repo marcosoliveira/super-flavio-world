@@ -20,7 +20,12 @@ export const SRC: Record<string, [string, string]> = {
   g1moro: ["g1, 28/08/2026", "https://g1.globo.com/politica/eleicoes/2026/noticia/2026/08/28/flavio-bolsonaro-entrevista-globo.ghtml"]
 };
 
-export const VW = 336;
+// Largura lógica da tela do jogo. A altura é sempre 192; no celular a largura acompanha
+// a proporção da tela (de 336 a 520), para ocupar a tela inteira sem distorcer nem cortar.
+export let VW = 336;
+export const VW_MIN = 336;
+export const VW_MAX = 520;
+export function setVW(v: number) { VW = v; }
 export const VH = 192;
 export const TS = 16;
 export const ROWS = 12;

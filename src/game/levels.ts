@@ -50,7 +50,7 @@ export const THEMES: Record<string, any> = {
   choco: { sky: ['#f7b7c8', '#ffe4c8'], top: '#ffc6dc', fill: '#6b3a1e', dot: '#54291a', brick: '#8a4a2a', block: '#7a4424', plat: '#ff8ab4', liquid: '#4a2412', liq2: '#6e3a1e' },
   vento: { sky: ['#7d8ba3', '#c8d2de'], top: '#dfe4ea', fill: '#8a8f99', dot: '#767b85', brick: '#9aa0aa', block: '#6f7580', plat: '#dfe4ea' },
   praia: { sky: ['#4fb2ff', '#ffe9b0'], top: '#f6de94', fill: '#d9b060', dot: '#c49a4c', brick: '#d9844a', block: '#b98a50', plat: '#8a5a30', liquid: '#1f78d0', liq2: '#5fb2ff' },
-  estudio: { sky: ['#07060f', '#241a3a'], top: '#e8c040', fill: '#4a3a2a', dot: '#3a2d20', brick: '#7a2a2a', block: '#5a4a3a', plat: '#c0302a' }
+  estudio: { sky: ['#4a3f7a', '#c39ad0'], top: '#e8c040', fill: '#4a3a2a', dot: '#3a2d20', brick: '#7a2a2a', block: '#5a4a3a', plat: '#c0302a' }
 };
 
 export const MAPNODES: [number, number][] = [

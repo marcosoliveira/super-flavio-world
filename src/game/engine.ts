@@ -1,5 +1,6 @@
-import { SRC, VW, VH, TS, ROWS, hr, fmtBR } from './sources.ts';
+import { SRC, VW, VH, TS, ROWS, hr, fmtBR, setVW, VW_MIN, VW_MAX } from './sources.ts';
 import { buildSprites } from './sprites.ts';
+import { createMusic } from './music.ts';
 import { LEVELS, THEMES, MAPNODES, build, LevelData } from './levels.ts';
 
 export function initGame() {
@@ -18,7 +19,7 @@ export function initGame() {
   let AC: AudioContext | null = null;
   let muted = false;
   function unlockAudio() {
-    if (AC) return;
+    if (AC) { if (AC.state === 'suspended') { try { AC.resume(); } catch (_) {} } return; }
     try {
       const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
       if (AudioCtx) AC = new AudioCtx();
@@ -30,6 +31,7 @@ export function initGame() {
       const t = AC.currentTime + delay;
       const o = AC.createOscillator();
       const g = AC.createGain();
+      g.gain.value = 0;
       o.type = type;
       o.frequency.setValueAtTime(f, t);
       if (slide) o.frequency.exponentialRampToValueAtTime(slide, t + d);
@@ -59,7 +61,6 @@ export function initGame() {
   let S = 'title';
   let T = 0;
   let lives = 22;
-  let progress = 0;
   let mapIdx = 0;
   let lv: LevelData | null = null;
   let st: any = null;
@@ -77,12 +78,21 @@ export function initGame() {
   let cardMode = '';
   let killedBy = '';
 
+  // Todas as fases ficam liberadas desde o início; guardamos quais já foram concluídas (uma por bit).
+  // Quem jogou a versão anterior mantém as fases que já tinha concluído ('sfw-progress').
+  const ALL_DONE = (1 << 7) - 1;
+  let doneMask = 0;
   try {
-    progress = Math.min(7, parseInt(localStorage.getItem('sfw-progress') || '0', 10) || 0);
+    doneMask = parseInt(localStorage.getItem('sfw-done') || '0', 10) || 0;
+    const old = Math.min(7, parseInt(localStorage.getItem('sfw-progress') || '0', 10) || 0);
+    for (let i = 0; i < old; i++) doneMask |= 1 << i;
   } catch (_) {}
-  mapIdx = Math.min(progress, 6);
+  doneMask &= ALL_DONE;
+  const isDone = (i: number) => !!(doneMask & (1 << i));
+  const doneCount = () => { let n = 0; for (let i = 0; i < 7; i++) if (isDone(i)) n++; return n; };
+  { let first = 0; while (first < 6 && isDone(first)) first++; mapIdx = first; }
   const saveProgress = () => {
-    try { localStorage.setItem('sfw-progress', String(progress)); } catch (_) {}
+    try { localStorage.setItem('sfw-done', String(doneMask)); } catch (_) {}
   };
 
   // Controls
@@ -139,7 +149,50 @@ export function initGame() {
     checkRotate();
   }
 
+  // Celular: tela cheia sem distorcer nem cortar. A altura lógica é fixa (192) e a largura do canvas
+  // acompanha a proporção da tela; o CSS usa --u, uma unidade calculada pela altura.
+  const FULLQ = window.matchMedia('(pointer:coarse), (hover:none), (orientation:landscape) and (max-height:600px)');
+  function layout() {
+    const de = document.documentElement, stg = $('stage');
+    if (!stg) return;
+    const full = FULLQ.matches || isTouch();
+    de.classList.toggle('full', full);
+    let vw = VW_MIN;
+    if (full) {
+      const W = window.innerWidth, H = window.innerHeight;
+      vw = Math.max(VW_MIN, Math.min(VW_MAX, Math.floor(VH * W / H)));
+      const sh = Math.min(H, W * VH / vw), sw = sh * vw / VH;
+      stg.style.width = sw + 'px';
+      stg.style.height = sh + 'px';
+      stg.style.setProperty('--u', (sh * 1.75 / 100) + 'px');
+    } else {
+      stg.style.width = '';
+      stg.style.height = '';
+      stg.style.removeProperty('--u');
+    }
+    if (vw !== VW || cv.width !== vw) {
+      setVW(vw);
+      cv.width = vw;
+      cv.height = VH;
+      ctx.imageSmoothingEnabled = false;
+    }
+  }
+
+  // No celular, o primeiro toque pede tela cheia de verdade (esconde as barras do navegador, onde é permitido)
+  function goFull() {
+    const d = document.documentElement as any, doc = document as any;
+    if (!d.classList.contains('full') || doc.fullscreenElement || doc.webkitFullscreenElement) return;
+    if (!(doc.fullscreenEnabled || doc.webkitFullscreenEnabled)) return;
+    const rq = d.requestFullscreen || d.webkitRequestFullscreen;
+    if (!rq) return;
+    try {
+      const pr = rq.call(d, { navigationUI: 'hide' });
+      if (pr && pr.then) pr.then(() => { try { (screen.orientation as any)?.lock?.('landscape')?.catch?.(() => {}); } catch (_) {} }).catch(() => {});
+    } catch (_) {}
+  }
+
   function checkRotate() {
+    layout();
     const need = window.innerHeight > window.innerWidth && (isTouch() || window.innerWidth <= 900);
     const rot = $('rotate');
     if (rot) rot.hidden = !need;
@@ -164,7 +217,7 @@ export function initGame() {
   function mapBar() {
     const D = LEVELS[mapIdx];
     const t1 = $('mT1'), t2 = $('mT2'), t3 = $('mT3');
-    if (t1) t1.textContent = `Fase ${mapIdx + 1} · ${D.year}` + (mapIdx < progress ? ' · concluída' : '');
+    if (t1) t1.textContent = `Fase ${mapIdx + 1} · ${D.year}` + (isDone(mapIdx) ? ' · concluída' : '');
     if (t2) t2.textContent = D.name;
     if (t3) t3.innerHTML = `Aperte ${keyJ()} para entrar na fase<br>◀ ▶ para andar · Vidas ${lives}`;
   }
@@ -224,7 +277,7 @@ export function initGame() {
   function updNext() {
     const n = document.getElementById('dlgNext');
     if (!n || !dq) return;
-    const more = dlgHidden() > 2;
+    const more = dlgHidden() > 8;
     n.classList.toggle('more', more);
     n.textContent = more
       ? `Aperte ${keyJ()} para rolar ▼`
@@ -252,7 +305,7 @@ export function initGame() {
     if (confirmHit()) {
       sfx.sel();
       const el = $('dlg');
-      if (el && dlgHidden() > 2) {
+      if (el && dlgHidden() > 8) {
         el.scrollBy({ top: el.clientHeight * 0.75, behavior: 'smooth' });
         return;
       }
@@ -276,7 +329,7 @@ export function initGame() {
     const roll = $('roll');
     if (roll) {
       roll.innerHTML = final
-        ? `<div class="go-kick">${heroName()} × 0</div><div class="go-big" style="text-decoration:line-through;text-decoration-thickness:.6cqw">Game over</div><div class="go-head">Aliado inesperado!</div><canvas id="moroSpr" width="14" height="20" style="width:7cqw;height:10cqw;image-rendering:pixelated" aria-hidden="true"></canvas><div class="go-sub">O Flavinho nunca foi condenado, e não ia ser agora. Sergio Moro, o ex-juiz que condenou Lula, entrou no PL e subiu no palanque de Flávio. Ele chega a tempo de salvar o dia: +22 vidas.</div><div class="go-lives">${heroName()} × 22</div><div class="go-hint">Aperte ${keyJ()} para continuar a fase</div>`
+        ? `<div class="go-kick">${heroName()} × 0</div><div class="go-big" style="text-decoration:line-through;text-decoration-thickness:calc(.6*var(--u))">Game over</div><div class="go-head">Aliado inesperado!</div><canvas id="moroSpr" width="14" height="20" style="width:calc(7*var(--u));height:calc(10*var(--u));image-rendering:pixelated" aria-hidden="true"></canvas><div class="go-sub">O Flavinho nunca foi condenado, e não ia ser agora. Sergio Moro, o ex-juiz que condenou Lula, entrou no PL e subiu no palanque de Flávio. Ele chega a tempo de salvar o dia: +22 vidas.</div><div class="go-lives">${heroName()} × 22</div><div class="go-hint">Aperte ${keyJ()} para continuar a fase</div>`
         : `<div class="go-kick">Fase ${lv.i! + 1} · ${esc(D.name)}</div><div class="go-big">Game over</div><div class="go-head">${esc(msg.head)}</div><div class="go-sub">${esc(msg.sub)}</div><div class="go-lives">${heroName()} × ${lives}</div><div class="go-hint">${keyJ()} tenta de novo · ${keyBack()} volta ao mapa</div>`;
       if (final) {
         const mc = document.getElementById('moroSpr') as HTMLCanvasElement;
@@ -750,6 +803,7 @@ export function initGame() {
         src: ['bbc22', 'stf', 'g1kop', 'g1em', 'bbcdh']
       }
     ], () => showUrna(done), under);
+    dq.ending = true;
   }
 
   // Cena final: urna eletrônica vista de frente, depois os créditos
@@ -764,7 +818,7 @@ export function initGame() {
   function updUrnaHint() {
     const h = document.getElementById('urnaHint');
     if (!h) return;
-    const more = urnaHidden() > 2;
+    const more = urnaHidden() > 8;
     h.classList.toggle('more', more);
     h.textContent = more ? `Aperte ${keyJ()} para rolar ▼` : `Aperte ${keyJ()} para confirmar ▶`;
   }
@@ -818,7 +872,7 @@ export function initGame() {
       }
       if (confirmHit()) {
         const el = $('urnaScr');
-        if (el && urnaHidden() > 2) {
+        if (el && urnaHidden() > 8) {
           sfx.sel();
           el.scrollBy({ top: el.clientHeight * 0.75, behavior: 'smooth' });
           return;
@@ -891,12 +945,24 @@ export function initGame() {
       note: (extra ? extra + ' ' : '') + D.outro.note,
       src: D.outro.src
     }], () => {
-      progress = Math.max(progress, i + 1);
+      doneMask |= 1 << i;
       saveProgress();
-      mapIdx = Math.min(i + 1, 6);
-      if (i === 6) showEnding(() => { mapIdx = 6; under = 'map'; setS('map'); });
-      else { under = 'map'; setS('map'); }
+      // com todas as fases concluídas (em qualquer ordem), toda fase terminada leva ao final na urna
+      if (doneMask === ALL_DONE) {
+        $('toast').hidden = true; toastT = 0;
+        showEnding(() => { mapIdx = i; under = 'map'; setS('map'); });
+        return;
+      }
+      // no mapa, o Flavinho vai para a próxima fase ainda não concluída
+      let n = (i + 1) % 7;
+      while (isDone(n)) n = (n + 1) % 7;
+      mapIdx = n;
+      under = 'map';
+      setS('map');
+      const f = 7 - doneCount();
+      toast(f === 1 ? 'Falta 1 fase para o final' : `Faltam ${f} fases para o final`);
     }, 'play');
+    dq.outro = true;
   }
 
   // Graphics rendering helpers
@@ -1002,10 +1068,15 @@ export function initGame() {
       });
     },
     estudio(cam) {
-      for (let i = 0; i < 30; i++) R((hr(i) * VW * 1.5 - cam * 0.02 + VW) % VW, hr(i + 9) * 90, 1, 1, '#bba');
+      for (let i = 0; i < 18; i++) R((hr(i) * VW * 1.5 - cam * 0.02 + VW) % VW, hr(i + 9) * 60, 1, 1, '#f2ecff');
+      // cenários de filmagem ao fundo
+      rep(cam, 0.35, 260, (x) => {
+        R(x + 20, 112, 70, 58, '#8a72b0'); R(x + 20, 112, 70, 2, '#a58cc6');
+        R(x + 150, 124, 56, 46, '#7d66a6'); R(x + 150, 124, 56, 2, '#9a82bc');
+      });
       for (let i = 0; i < 3; i++) {
         const cx = 60 + i * 110, a = Math.sin(T * 0.012 + i * 2) * 0.5;
-        ctx.fillStyle = 'rgba(255,236,160,.10)';
+        ctx.fillStyle = 'rgba(255,244,200,.16)';
         ctx.beginPath(); ctx.moveTo(cx, VH); ctx.lineTo(cx + Math.sin(a) * 260 - 40, 0); ctx.lineTo(cx + Math.sin(a) * 260 + 40, 0); ctx.fill();
       }
       rep(cam, 0.2, 420, (x) => {
@@ -1090,6 +1161,7 @@ export function initGame() {
     const c = '#17171f', m = '#6a6a80';
     R(x + 3, y + 4, 14, 7, c); R(x + 15, y, 4, 7, c); R(x + 17, y - 2, 5, 4, c); R(x + 21, y, 1, 2, c);
     R(x + 15, y - 1, 2, 5, m); R(x + 19, y - 1, 1, 1, '#fff'); R(x + 1, y + 4, 2, 7, m);
+    R(x + 3, y + 4, 12, 1, '#4a4a66'); R(x + 17, y - 2, 4, 1, '#4a4a66');
     const o = run ? ((T >> 3) % 2 ? 2 : -2) : 0;
     R(x + 4 + o, y + 11, 2, 7, c); R(x + 8 - o, y + 11, 2, 7, c); R(x + 12 + o, y + 11, 2, 7, c); R(x + 15 - o, y + 11, 2, 7, c);
     ctx.restore();
@@ -1335,86 +1407,85 @@ export function initGame() {
     const th = THEMES.rio;
     sky(th);
     BG.rio(titleCam);
-    for (let tx = -1; tx < 23; tx++) {
+    for (let tx = -1; tx < Math.ceil(VW / TS) + 2; tx++) {
       const x = Math.round(tx * TS - (titleCam % TS));
       R(x, 160, 16, 32, th.fill); R(x, 160, 16, 5, th.top); R(x + 4, 172, 2, 2, th.dot);
     }
-    ctx.drawImage(SPR[(T >> 3) % 2 ? 'walk' : 'stand'][0], 150, 140);
+    ctx.drawImage(SPR[(T >> 3) % 2 ? 'walk' : 'stand'][0], Math.round(VW / 2 - 18), 140);
   }
 
-  // Mapa: uma barra de chocolate com laranja, cheia de rachadurinhas
-  const BAR = { x: 12, y: 26, w: 312, h: 152, cols: 8, rows: 4 };
+  // Mapa: ilha verde e redonda no mar, com o céu de Brasília e o Congresso Nacional ao fundo.
+  // No celular, a barra do mapa fica no topo (sobre o título) e os controles nos cantos de baixo,
+  // então as fases ficam na faixa do meio, longe dos dois.
+  const HORIZON = 74;
+  const mapY = (y: number) => Math.round(96 + (y - 60) * 0.58);
+
+  // Congresso: as duas torres ligadas no alto, a cúpula do Senado e a cuia da Câmara sobre a plataforma
+  function drawCongress(cx: number, base: number) {
+    const wall = '#f3f5f8', shade = '#c4cdd8', line = '#9fadbf';
+    R(cx - 74, base - 5, 148, 5, wall); R(cx - 74, base - 1, 148, 1, shade); R(cx - 74, base - 5, 148, 1, '#ffffff');
+    for (const tx of [cx - 8, cx + 2]) {
+      R(tx, base - 46, 6, 41, wall); R(tx + 5, base - 46, 1, 41, shade);
+      for (let y = base - 44; y < base - 6; y += 3) R(tx, y, 5, 1, line);
+    }
+    R(cx - 8, base - 41, 16, 3, wall); R(cx - 8, base - 38, 16, 1, shade);
+    ctx.fillStyle = wall; ctx.beginPath(); ctx.arc(cx - 38, base - 5, 11, Math.PI, 0); ctx.fill();
+    ctx.fillStyle = shade; ctx.beginPath(); ctx.arc(cx - 38, base - 5, 11, Math.PI * 1.55, 0); ctx.lineTo(cx - 38, base - 5); ctx.fill();
+    ctx.fillStyle = wall; ctx.beginPath(); ctx.moveTo(cx + 20, base - 16); ctx.lineTo(cx + 56, base - 16);
+    ctx.quadraticCurveTo(cx + 50, base - 5, cx + 38, base - 5); ctx.quadraticCurveTo(cx + 26, base - 5, cx + 20, base - 16); ctx.fill();
+    R(cx + 20, base - 17, 36, 2, shade); R(cx + 36, base - 6, 4, 1, shade);
+  }
+
+  // Dark Horse pastando: cabeça baixa mastigando, rabo balançando de vez em quando
+  function drawHorseGraze(x: number, y: number) {
+    const c = '#17171f', m = '#6a6a80', hl = '#4a4a66', chew = (T >> 4) % 2, sw = (T >> 5) % 3 === 0;
+    ctx.fillStyle = 'rgba(0,0,0,.18)'; ctx.beginPath(); ctx.ellipse(x + 12, y + 18, 12, 2, 0, 0, Math.PI * 2); ctx.fill();
+    R(x + 3, y + 4, 14, 7, c); R(x + 3, y + 4, 12, 1, hl);
+    R(x + 15, y + 5, 4, 4, c); R(x + 17, y + 8, 4, 4, c); R(x + 18, y + 11 + chew, 5, 4, c);
+    R(x + 16, y + 5, 2, 5, m); R(x + 21, y + 12 + chew, 1, 1, '#fff');
+    if (sw) R(x, y + 5, 2, 6, m); else R(x + 1, y + 4, 2, 7, m);
+    R(x + 4, y + 11, 2, 7, c); R(x + 8, y + 11, 2, 7, c); R(x + 12, y + 11, 2, 7, c); R(x + 15, y + 11, 2, 7, c);
+    R(x + 24, y + 15, 1, 3, '#2a9a3a'); R(x + 26, y + 16, 1, 2, '#2a9a3a'); R(x + 22, y + 16, 1, 2, '#2a9a3a');
+  }
+
   function renderMap() {
-    // fundo: mesa escura
-    R(0, 0, VW, VH, '#2b160b');
-    for (let y = 0; y < VH; y += 6) R(0, y, VW, 1, '#331b0e');
-    // sombra e borda da barra
-    R(BAR.x + 3, BAR.y + 4, BAR.w, BAR.h, '#170b05');
-    R(BAR.x, BAR.y, BAR.w, BAR.h, '#8a4210');
-    // gomos com relevo
-    const cw = (BAR.w - 6) / BAR.cols, rh = (BAR.h - 6) / BAR.rows;
-    for (let r = 0; r < BAR.rows; r++) for (let c = 0; c < BAR.cols; c++) {
-      const x = Math.round(BAR.x + 3 + c * cw), y = Math.round(BAR.y + 3 + r * rh);
-      const w = Math.round(cw) - 2, h = Math.round(rh) - 2;
-      R(x, y, w, h, '#b85a14');
-      R(x + 2, y + 2, w - 4, h - 4, '#e8892e');
-      R(x + 2, y + 2, w - 4, 2, '#f6a64c');
-      R(x + 2, y + 2, 2, h - 4, '#f6a64c');
-      R(x + 2, y + h - 4, w - 4, 2, '#c96a1c');
-      R(x + w - 4, y + 2, 2, h - 4, '#c96a1c');
-      // raspas de laranja
-      for (let k = 0; k < 3; k++) {
-        const n = r * 31 + c * 7 + k;
-        R(x + 5 + Math.floor(hr(n) * (w - 12)), y + 5 + Math.floor(hr(n + 50) * (h - 12)), 2, 1, '#ffc46a');
-      }
+    const sk = ctx.createLinearGradient(0, 0, 0, HORIZON);
+    sk.addColorStop(0, '#7cc4ff'); sk.addColorStop(1, '#d6efff');
+    ctx.fillStyle = sk; ctx.fillRect(0, 0, VW, HORIZON);
+    for (let i = 0; i < 3; i++) {
+      const cx = ((i * 140 + 20 - T * 0.08) % (VW + 80) + VW + 80) % (VW + 80) - 40;
+      circ(cx, 40 + i * 5, 5, '#fff'); circ(cx + 7, 38 + i * 5, 7, '#fff'); circ(cx + 15, 41 + i * 5, 4, '#fff');
     }
-    // rachadurinhas: trilhas em zigue-zague de 1 px
-    for (let i = 0; i < 46; i++) {
-      let x = BAR.x + 6 + Math.floor(hr(i * 3 + 1) * (BAR.w - 12));
-      let y = BAR.y + 6 + Math.floor(hr(i * 3 + 2) * (BAR.h - 12));
-      const len = 5 + Math.floor(hr(i * 3 + 3) * 9);
-      const dir = hr(i + 400) < 0.5 ? 1 : -1;
-      for (let k = 0; k < len; k++) {
-        R(x, y, 1, 1, '#6e3009');
-        R(x + 1, y + 1, 1, 1, '#f6a64c');
-        if (hr(i * 17 + k) < 0.55) x += dir; else y += 1;
-        if (hr(i * 29 + k) < 0.12) x -= dir * 2;
-        if (x < BAR.x + 4 || x > BAR.x + BAR.w - 5 || y > BAR.y + BAR.h - 5) break;
-      }
-    }
-    // mordida no canto de cima à direita
-    const bx = BAR.x + BAR.w, by = BAR.y;
-    const bite = [[0, 0, 15], [-12, -3, 9], [3, 13, 9]];
+    drawCongress(Math.round(VW - 82), HORIZON - 2);
+    R(0, HORIZON - 3, VW, 3, '#8fbf6a'); R(0, HORIZON - 3, VW, 1, '#a9d482');
+    R(0, HORIZON, VW, VH - HORIZON, '#2a6fd6');
+    for (let y = HORIZON + 4; y < VH; y += 12) for (let x = ((y * 7 + T * 0.3) % 24) - 24; x < VW; x += 24) R(x, y, 8, 1, '#5b93e6');
     ctx.save();
-    ctx.beginPath(); ctx.rect(BAR.x, BAR.y, BAR.w, BAR.h); ctx.clip();
-    bite.forEach(([dx, dy, rr]) => circ(bx + dx, by + dy, rr + 2, '#8a4210'));
-    bite.forEach(([dx, dy, rr]) => circ(bx + dx, by + dy, rr, '#2b160b'));
-    ctx.restore();
-    const maxIdx = Math.min(progress, 6);
+    ctx.translate(Math.round((VW - 336) / 2), 0);
+    ctx.fillStyle = '#1f7a2e'; ctx.beginPath(); ctx.ellipse(170, 130, 160, 58, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = '#3ec04a'; ctx.beginPath(); ctx.ellipse(170, 126, 154, 52, 0, 0, Math.PI * 2); ctx.fill();
+    for (let i = 0; i < 14; i++) { const x = 40 + hr(i) * 260, y = 98 + hr(i + 20) * 56; circ(x, y, 5, '#2a9a3a'); circ(x - 3, y + 2, 4, '#2a9a3a'); }
     for (let i = 0; i < MAPNODES.length - 1; i++) {
-      const [a, b] = [MAPNODES[i], MAPNODES[i + 1]], open = i < maxIdx;
-      for (let k = 1; k < 8; k++) {
-        const t = k / 8;
-        R(a[0] + (b[0] - a[0]) * t - 1, a[1] + (b[1] - a[1]) * t - 1, 3, 3, open ? '#fff2c8' : '#8a4210');
-      }
+      const [a, b] = [MAPNODES[i], MAPNODES[i + 1]], ay = mapY(a[1]), by = mapY(b[1]);
+      for (let k = 1; k < 8; k++) { const t = k / 8; R(a[0] + (b[0] - a[0]) * t - 1, ay + (by - ay) * t - 1, 3, 3, '#f4e08a'); }
     }
-    MAPNODES.forEach(([x, y], i) => {
-      const locked = i > maxIdx, done = i < progress;
+    // fases concluídas ficam amarelas, com um selinho verde; as que faltam ficam vermelhas
+    MAPNODES.forEach(([x, y0], i) => {
+      const y = mapY(y0), done = isDone(i);
       circ(x, y + 2, 7, '#1a1020');
-      circ(x, y, 7, locked ? '#7a8a7a' : done ? '#e8412c' : '#ffd21f');
-      circ(x, y, 4, locked ? '#5a6a5a' : done ? '#ff8a6a' : '#fff2a0');
+      circ(x, y, 7, done ? '#ffd21f' : '#e8412c');
+      circ(x, y, 4, done ? '#fff2a0' : '#ff8a6a');
       ctx.fillStyle = '#1a1020'; ctx.font = '6px "Press Start 2P", monospace';
       ctx.fillText(String(i + 1), x - 3, y + 3);
+      if (done) { R(x + 4, y - 9, 5, 5, '#1a1020'); R(x + 5, y - 8, 3, 3, '#2ecc55'); }
     });
-    // o Dark Horse espera ao lado da fase 7
-    const [hx, hy] = MAPNODES[6];
-    const hb = (T >> 5) % 2;
-    R(hx + 12, hy + 24, 22, 2, 'rgba(0,0,0,.35)');
-    drawHorse(hx + 12, hy + 8 - hb, -1, false);
-    const [nx, ny] = MAPNODES[mapIdx];
+    // o Dark Horse pasta na grama, ao lado da fase 7
+    drawHorseGraze(266, 104);
+    const [nx, ny0] = MAPNODES[mapIdx], ny = mapY(ny0);
     ctx.drawImage(SPR.stand[0], nx - 7, ny - 24 + Math.round(Math.sin(T * 0.12) * 2));
     ctx.fillStyle = '#1a1020'; ctx.font = '8px "Press Start 2P", monospace'; ctx.fillText('SUPER FLÁVIO WORLD', 13, 17);
     ctx.fillStyle = '#fff'; ctx.fillText('SUPER FLÁVIO WORLD', 12, 16);
+    ctx.restore();
   }
 
   function hud() {
@@ -1475,7 +1546,7 @@ export function initGame() {
         if (pressed.P) setS('title');
         break;
       case 'map': {
-        const maxIdx = Math.min(progress, 6);
+        const maxIdx = 6;
         if ((pressed.R || pressed.U) && mapIdx < maxIdx) { mapIdx++; sfx.sel(); mapBar(); }
         if ((pressed.L || pressed.D) && mapIdx > 0) { mapIdx--; sfx.sel(); mapBar(); }
         if (pressed.P) setS('title');
@@ -1550,6 +1621,22 @@ export function initGame() {
     for (const k in pressed) pressed[k] = false;
   }
 
+  // Música de fundo: qual faixa toca agora
+  const music = createMusic();
+  function wantTrack(): string | null {
+    if (document.hidden) return null;
+    if (S === 'title' || S === 'select' || S === 'map') return 'title';
+    if (S === 'urna' || S === 'credits') return 'ending';
+    if (S === 'dialog') {
+      if (dq && dq.ending) return 'ending';
+      if (under === 'map') return 'title';
+      if (dq && dq.outro) return null;
+      return lv ? lv.id! : null;
+    }
+    if ((S === 'play' || S === 'pause') && lv) return lv.id!;
+    return null; // morrendo, game over e fase concluída ficam só com os efeitos sonoros
+  }
+
   // Animation Loop
   let acc = 0;
   let lastT = 0;
@@ -1562,6 +1649,7 @@ export function initGame() {
     try {
       while (acc >= 1000 / 60) { step(); acc -= 1000 / 60; }
       render();
+      music.tick(AC, wantTrack(), muted, S === 'pause');
     } catch (err) {
       acc = 0;
       console.error(err);
@@ -1640,6 +1728,11 @@ export function initGame() {
   const onResize = () => checkRotate();
   window.addEventListener('resize', onResize);
   window.addEventListener('orientationchange', onResize);
+  window.visualViewport?.addEventListener('resize', onResize);
+  document.addEventListener('fullscreenchange', onResize);
+  document.addEventListener('webkitfullscreenchange', onResize);
+  const onPointerUpFull = (e: PointerEvent) => { if (e.pointerType !== 'mouse') goFull(); };
+  window.addEventListener('pointerup', onPointerUpFull, { passive: true });
   window.addEventListener('touchstart', enableTouch, { passive: true });
 
   const releaseAll = () => {
@@ -1721,6 +1814,7 @@ export function initGame() {
 
   return () => {
     cancelAnimationFrame(animId);
+    music.stop(AC);
     window.removeEventListener('keydown', onKeyDown);
     window.removeEventListener('keyup', onKeyUp);
     window.removeEventListener('blur', onBlur);
@@ -1735,6 +1829,10 @@ export function initGame() {
     });
     window.removeEventListener('resize', onResize);
     window.removeEventListener('orientationchange', onResize);
+    window.visualViewport?.removeEventListener('resize', onResize);
+    document.removeEventListener('fullscreenchange', onResize);
+    document.removeEventListener('webkitfullscreenchange', onResize);
+    window.removeEventListener('pointerup', onPointerUpFull);
     window.removeEventListener('touchstart', enableTouch);
     screenHandlers.forEach(({ el, fn }) => el.removeEventListener('pointerdown', fn));
     stage?.removeEventListener('pointerdown', onStageDown);
