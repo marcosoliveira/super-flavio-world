@@ -412,6 +412,22 @@ export function initGame() {
     return false;
   }
 
+  function getStartX(): number {
+    const dp = $('dpad');
+    if (dp && cv) {
+      const dr = dp.getBoundingClientRect();
+      const cr = cv.getBoundingClientRect();
+      if (cr.width > 0 && dr.width > 0 && isTouch()) {
+        const dpadRightCanvas = (dr.right - cr.left) * (VW / cr.width);
+        if (dpadRightCanvas > 0) {
+          // Começa sempre 20px para a direita dos controles direcionais
+          return Math.max(32, Math.round(dpadRightCanvas + 20));
+        }
+      }
+    }
+    return isTouch() ? 96 : 32;
+  }
+
   function loadLevel(i: number) {
     const D = LEVELS[i];
     lv = build(D);
@@ -426,7 +442,15 @@ export function initGame() {
       lv.g.forEach(r => r.forEach(c => { if (c === '?') n++; }));
       lv.coinVal = 7e6 / (n || 1);
     }
-    P = { x: lv.start.x, y: lv.start.y, w: 10, h: 20, vx: 0, vy: 0, on: false, face: 1, ghost: false, meter: 150, inv: 0, horse: false, jbuf: 0, coyote: 0, anim: 0, ext: 0, inT: false };
+    const startX = getStartX();
+    lv.start.x = startX;
+    P = { x: startX, y: lv.start.y, w: 10, h: 20, vx: 0, vy: 0, on: false, face: 1, ghost: false, meter: 150, inv: 0, horse: false, jbuf: 0, coyote: 0, anim: 0, ext: 0, inT: false };
+    if (lv.id === 'darkhorse') {
+      const horse = lv.ents.find(e => e.k === 'horse');
+      if (horse && horse.x < startX) {
+        horse.x = startX + 16;
+      }
+    }
     camX = 0;
     parts = [];
     hudCache = '';
