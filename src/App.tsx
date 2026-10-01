@@ -92,10 +92,10 @@ export default function App() {
         </div>
         <div className="btns">
           <button className="tbtn b" data-b="B" aria-label="Correr ou ação">
-            B<small>ação</small>
+            B
           </button>
           <button className="tbtn a" data-b="J" aria-label="Pular">
-            A<small>pular</small>
+            A
           </button>
         </div>
       </div>

@@ -168,7 +168,7 @@ export function initGame() {
     const t1 = $('mT1'), t2 = $('mT2'), t3 = $('mT3');
     if (t1) t1.textContent = `Fase ${mapIdx + 1} · ${D.year}` + (mapIdx < progress ? ' · concluída' : '');
     if (t2) t2.textContent = D.name;
-    if (t3) t3.innerHTML = `${keyJ()} entra na fase<br>◀ ▶ para andar · Vidas ${lives}`;
+    if (t3) t3.innerHTML = `Aperte ${keyJ()} para entrar na fase<br>◀ ▶ para andar · Vidas ${lives}`;
   }
 
   function ui() {
@@ -179,6 +179,7 @@ export function initGame() {
     $('dlg').hidden = S !== 'dialog';
     $('card').hidden = S !== 'card';
     $('pause').hidden = S !== 'pause';
+    document.documentElement.classList.toggle('txt-open', S === 'dialog' || S === 'card');
     if (S === 'map') mapBar();
   }
 
@@ -203,13 +204,31 @@ export function initGame() {
       if (p.src && p.src.length) {
         h += `<div class="src">Fontes: ${p.src.map((k: string) => `<a href="${SRC[k][1]}" target="_blank" rel="noopener noreferrer">${esc(SRC[k][0])} ↗</a>`).join(' · ')}</div>`;
       }
-      h += `<div class="next">${keyJ()} ${dq.i < dq.pages.length - 1 ? 'continua' : 'segue'} ▶</div>`;
+      h += `<div class="next" id="dlgNext"></div>`;
     }
     const dlgEl = $('dlg');
     if (dlgEl) {
       dlgEl.innerHTML = h;
       if (fresh) dlgEl.scrollTop = 0;
+      else if (!doneTyping) dlgEl.scrollTop = dlgEl.scrollHeight;
+      updNext();
     }
+  }
+
+  // Quanto texto ainda está escondido abaixo da área visível da caixa
+  function dlgHidden() {
+    const el = $('dlg');
+    return el ? el.scrollHeight - el.clientHeight - el.scrollTop : 0;
+  }
+
+  function updNext() {
+    const n = document.getElementById('dlgNext');
+    if (!n || !dq) return;
+    const more = dlgHidden() > 2;
+    n.classList.toggle('more', more);
+    n.textContent = more
+      ? `Aperte ${keyJ()} para rolar ▼`
+      : `Aperte ${keyJ()} para continuar ▶`;
   }
 
   function dialog(pages: any[], done: () => void, u?: string) {
@@ -232,6 +251,11 @@ export function initGame() {
     }
     if (confirmHit()) {
       sfx.sel();
+      const el = $('dlg');
+      if (el && dlgHidden() > 2) {
+        el.scrollBy({ top: el.clientHeight * 0.75, behavior: 'smooth' });
+        return;
+      }
       if (dq.i < dq.pages.length - 1) {
         dq.i++;
         dq.n = 0;
@@ -252,7 +276,7 @@ export function initGame() {
     const roll = $('roll');
     if (roll) {
       roll.innerHTML = final
-        ? `<div class="go-kick">${heroName()} × 0</div><div class="go-big" style="text-decoration:line-through;text-decoration-thickness:.6cqw">Game over</div><div class="go-head">Aliado inesperado!</div><canvas id="moroSpr" width="14" height="20" style="width:7cqw;height:10cqw;image-rendering:pixelated" aria-hidden="true"></canvas><div class="go-sub">O Flavinho nunca foi condenado, e não ia ser agora. Sergio Moro, o ex-juiz que condenou Lula, entrou no PL e subiu no palanque de Flávio. Ele chega a tempo de salvar o dia: +22 vidas.</div><div class="go-lives">${heroName()} × 22</div><div class="go-hint">${keyJ()} continua a fase</div>`
+        ? `<div class="go-kick">${heroName()} × 0</div><div class="go-big" style="text-decoration:line-through;text-decoration-thickness:.6cqw">Game over</div><div class="go-head">Aliado inesperado!</div><canvas id="moroSpr" width="14" height="20" style="width:7cqw;height:10cqw;image-rendering:pixelated" aria-hidden="true"></canvas><div class="go-sub">O Flavinho nunca foi condenado, e não ia ser agora. Sergio Moro, o ex-juiz que condenou Lula, entrou no PL e subiu no palanque de Flávio. Ele chega a tempo de salvar o dia: +22 vidas.</div><div class="go-lives">${heroName()} × 22</div><div class="go-hint">Aperte ${keyJ()} para continuar a fase</div>`
         : `<div class="go-kick">Fase ${lv.i! + 1} · ${esc(D.name)}</div><div class="go-big">Game over</div><div class="go-head">${esc(msg.head)}</div><div class="go-sub">${esc(msg.sub)}</div><div class="go-lives">${heroName()} × ${lives}</div><div class="go-hint">${keyJ()} tenta de novo · ${keyBack()} volta ao mapa</div>`;
       if (final) {
         const mc = document.getElementById('moroSpr') as HTMLCanvasElement;
@@ -1478,6 +1502,7 @@ export function initGame() {
     if (document.hidden && S === 'play') setS('pause');
   };
   document.addEventListener('visibilitychange', onVisibilityChange);
+  $('dlg')?.addEventListener('scroll', updNext);
 
   if (window.matchMedia('(pointer:coarse)').matches || (navigator.maxTouchPoints > 0 && window.matchMedia('(hover:none)').matches)) {
     enableTouch();
@@ -1506,5 +1531,6 @@ export function initGame() {
     screenHandlers.forEach(({ el, fn }) => el.removeEventListener('pointerdown', fn));
     stage?.removeEventListener('pointerdown', onStageDown);
     document.removeEventListener('visibilitychange', onVisibilityChange);
+    $('dlg')?.removeEventListener('scroll', updNext);
   };
 }
