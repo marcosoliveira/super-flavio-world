@@ -455,7 +455,16 @@ export function initGame() {
     if (lv?.id === 'fantasma') P.meter = Math.min(150, P.meter + 35);
     if (lv?.id === 'rachadinha') {
       st.queiroz += lv.coinVal || 0;
-      parts.push({ k: 'half', sx: x - camX, sy: y, t: 0 });
+      // metade vai para o contador de moedas, a outra metade sai pelo outro lado da tela (a parte do Flavinho)
+      let cx = VW - 24, cy = 6;
+      const hc = document.getElementById('hCoins'), cr = cv.getBoundingClientRect();
+      if (hc && cr.width) {
+        const r = hc.getBoundingClientRect();
+        cx = (r.left + r.width * 0.25 - cr.left) * VW / cr.width;
+        cy = (r.top + r.height / 2 - cr.top) * VH / cr.height - 5;
+      }
+      parts.push({ k: 'half', sx: x - camX, sy: y, tx: cx, ty: cy, t: 0 });
+      parts.push({ k: 'half', sx: x - camX, sy: y, tx: -12, ty: VH * 0.35, t: 0 });
     }
   }
 
@@ -1388,8 +1397,8 @@ export function initGame() {
       } else if (p.k === 'horseRun') {
         drawHorse(px, p.y + 10, p.face, true);
       } else if (p.k === 'half') {
-        const k = p.t / 60, sx = p.sx + (VW * 0.62 - p.sx) * k, sy = p.sy + (6 - p.sy) * k - Math.sin(k * Math.PI) * 30;
-        R(sx, sy, 5, 10, '#ffd21f');
+        const k = p.t / 60, sx = p.sx + (p.tx - p.sx) * k, sy = p.sy + (p.ty - p.sy) * k - Math.sin(k * Math.PI) * 30;
+        R(sx, sy, 5, 10, '#ffd21f'); R(sx + 1, sy + 2, 2, 6, '#fff3a0');
       } else if (p.k === 'wind') {
         if (p.paper) { R(p.x, p.y, 6, 4, '#f7f5ee'); R(p.x + 1, p.y + 1, 4, 1, '#999'); }
         else R(p.x, p.y, 10 + st.gust * 14, 1, 'rgba(255,255,255,.55)');
