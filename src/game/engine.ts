@@ -524,7 +524,7 @@ export function initGame() {
       if (!P.ghost && P.inT) { P.vx = -1.6; if (T % 10 === 0) tone(180, 0.06, 'sawtooth', 0.03); }
     }
 
-    if (lv.id === 'lacos' && pressed.B && lv.ents.filter(e => e.k === 'medal').length < 2) {
+    if (lv.id === 'lacos' && pressed.B && lv.ents.filter(e => e.k === 'medal' && !e.gone).length < 2) {
       lv.ents.push({ k: 'medal', x: P.x + (P.face > 0 ? P.w : -8), y: P.y + 6, w: 8, h: 8, vx: 3.2 * P.face, vy: 1, life: 140 });
       sfx.throw();
     }
